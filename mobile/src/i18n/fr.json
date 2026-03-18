@@ -1,0 +1,65 @@
+{
+  "common": {
+    "loading": "Chargement...",
+    "error": "Erreur",
+    "retry": "Réessayer",
+    "save": "Enregistrer",
+    "cancel": "Annuler",
+    "confirm": "Confirmer"
+  },
+  "auth": {
+    "login": "Connexion",
+    "register": "Inscription",
+    "email": "Courriel",
+    "password": "Mot de passe",
+    "name": "Nom complet",
+    "inviteCode": "Code d'invitation",
+    "scanQR": "Scanner le code QR",
+    "scanInstructions": "Scannez le code QR fourni par votre gestionnaire",
+    "enterCode": "Entrer le code manuellement",
+    "logout": "Déconnexion"
+  },
+  "dashboard": {
+    "title": "Tableau de bord",
+    "connectionStatus": "Statut connexion",
+    "online": "En ligne",
+    "degraded": "Dégradé",
+    "offline": "Hors ligne",
+    "failover": "Basculement actif",
+    "download": "Téléchargement",
+    "upload": "Téléversement",
+    "latency": "Latence",
+    "packetLoss": "Perte de paquets",
+    "source": "Source active",
+    "starlink": "Starlink",
+    "cellular": "Cellulaire 5G",
+    "devices": "Appareils connectés",
+    "networkHealth": "Santé du réseau"
+  },
+  "admin": {
+    "dashboard": "Admin",
+    "shoots": "Tournages",
+    "users": "Utilisateurs",
+    "monitoring": "Monitoring",
+    "more": "Plus",
+    "createShoot": "Nouveau tournage",
+    "generateCodes": "Générer des codes",
+    "alerts": "Alertes",
+    "reports": "Rapports",
+    "billing": "Facturation"
+  },
+  "support": {
+    "title": "Support",
+    "reportIssue": "Signaler un problème",
+    "contactOperator": "Contacter l'opérateur",
+    "sent": "Signalement envoyé"
+  },
+  "settings": {
+    "title": "Paramètres",
+    "language": "Langue",
+    "notifications": "Notifications",
+    "darkMode": "Mode sombre",
+    "about": "À propos",
+    "version": "Version"
+  }
+}

@@ -1,0 +1,65 @@
+{
+  "common": {
+    "loading": "Loading...",
+    "error": "Error",
+    "retry": "Retry",
+    "save": "Save",
+    "cancel": "Cancel",
+    "confirm": "Confirm"
+  },
+  "auth": {
+    "login": "Login",
+    "register": "Sign Up",
+    "email": "Email",
+    "password": "Password",
+    "name": "Full Name",
+    "inviteCode": "Invite Code",
+    "scanQR": "Scan QR Code",
+    "scanInstructions": "Scan the QR code provided by your set manager",
+    "enterCode": "Enter code manually",
+    "logout": "Logout"
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "connectionStatus": "Connection Status",
+    "online": "Online",
+    "degraded": "Degraded",
+    "offline": "Offline",
+    "failover": "Failover Active",
+    "download": "Download",
+    "upload": "Upload",
+    "latency": "Latency",
+    "packetLoss": "Packet Loss",
+    "source": "Active Source",
+    "starlink": "Starlink",
+    "cellular": "Cellular 5G",
+    "devices": "Connected Devices",
+    "networkHealth": "Network Health"
+  },
+  "admin": {
+    "dashboard": "Admin",
+    "shoots": "Shoots",
+    "users": "Users",
+    "monitoring": "Monitoring",
+    "more": "More",
+    "createShoot": "New Shoot",
+    "generateCodes": "Generate Codes",
+    "alerts": "Alerts",
+    "reports": "Reports",
+    "billing": "Billing"
+  },
+  "support": {
+    "title": "Support",
+    "reportIssue": "Report an Issue",
+    "contactOperator": "Contact Operator",
+    "sent": "Report sent"
+  },
+  "settings": {
+    "title": "Settings",
+    "language": "Language",
+    "notifications": "Notifications",
+    "darkMode": "Dark Mode",
+    "about": "About",
+    "version": "Version"
+  }
+}

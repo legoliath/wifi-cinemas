@@ -1,0 +1,25 @@
+{
+  "expo": {
+    "name": "WiFi Cin\u00e9mas",
+    "slug": "wifi-cinemas",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "backgroundColor": "#1A365D"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.wificinemas.app"
+    },
+    "android": {
+      "package": "com.wificinemas.app"
+    },
+    "scheme": "wfc",
+    "plugins": [
+      "expo-camera",
+      "expo-secure-store",
+      "expo-router"
+    ]
+  }
+}
