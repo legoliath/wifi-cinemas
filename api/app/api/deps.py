@@ -47,3 +47,44 @@ async def require_tech_or_admin(current_user: Annotated[User, Depends(get_curren
     if current_user.role not in ("owner", "admin", "tech"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tech or admin access required")
     return current_user
+
+
+async def check_shoot_admin(
+    user: User, shoot_id: uuid.UUID, db: AsyncSession
+) -> bool:
+    """Check if user is owner OR has admin-level access to this shoot."""
+    if user.role == "owner":
+        return True
+    from app.models.shoot_access import ShootAccess
+    result = await db.execute(
+        select(ShootAccess).where(
+            ShootAccess.shoot_id == shoot_id,
+            ShootAccess.user_id == user.id,
+            ShootAccess.shoot_role == "admin",
+            ShootAccess.revoked_at.is_(None),
+        )
+    )
+    return result.scalar_one_or_none() is not None
+
+
+async def check_shoot_access(
+    user: User, shoot_id: uuid.UUID, db: AsyncSession,
+    min_role: str = "user",
+) -> bool:
+    """Check if user has at least min_role access to this shoot."""
+    if user.role == "owner":
+        return True
+    from app.models.shoot_access import ShootAccess
+    role_hierarchy = {"admin": 3, "tech": 2, "user": 1}
+    min_level = role_hierarchy.get(min_role, 1)
+    result = await db.execute(
+        select(ShootAccess).where(
+            ShootAccess.shoot_id == shoot_id,
+            ShootAccess.user_id == user.id,
+            ShootAccess.revoked_at.is_(None),
+        )
+    )
+    access = result.scalar_one_or_none()
+    if not access:
+        return False
+    return role_hierarchy.get(access.shoot_role, 0) >= min_level
