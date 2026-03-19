@@ -8,6 +8,7 @@ import { QRScanScreen } from '../screens/auth/QRScanScreen';
 import { OnboardingScreen } from '../screens/auth/OnboardingScreen';
 import { UserTabNavigator } from './UserTabNavigator';
 import { AdminTabNavigator } from './AdminTabNavigator';
+import { TechTabNavigator } from './TechTabNavigator';
 
 const Stack = createNativeStackNavigator();
 
@@ -27,6 +28,8 @@ export function AppNavigator() {
           </>
         ) : user?.role === 'admin' ? (
           <Stack.Screen name="AdminTabs" component={AdminTabNavigator} options={{ headerShown: false }} />
+        ) : user?.role === 'tech' ? (
+          <Stack.Screen name="TechTabs" component={TechTabNavigator} options={{ headerShown: false }} />
         ) : (
           <Stack.Screen name="UserTabs" component={UserTabNavigator} options={{ headerShown: false }} />
         )}

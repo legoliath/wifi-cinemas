@@ -12,7 +12,7 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     name: Mapped[str] = mapped_column(String(255))
     phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    role: Mapped[str] = mapped_column(SAEnum("admin", "user", name="user_role"), default="user")
+    role: Mapped[str] = mapped_column(SAEnum("admin", "tech", "user", name="user_role"), default="user")
     lang: Mapped[str] = mapped_column(String(5), default="fr")
     is_active: Mapped[bool] = mapped_column(default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
