@@ -23,11 +23,50 @@ async def test_update_me(client: AsyncClient, user_token: str):
 
 
 @pytest.mark.asyncio
-async def test_list_users_admin_only(client: AsyncClient, user_token: str, admin_token: str):
-    # User can't list
+async def test_owner_lists_all_users(client: AsyncClient, owner_token: str, admin_user, regular_user):
+    r = await client.get("/api/v1/users", headers={"Authorization": f"Bearer {owner_token}"})
+    assert r.status_code == 200
+    assert r.json()["total"] >= 3  # owner + admin + user
+
+
+@pytest.mark.asyncio
+async def test_user_cannot_list_users(client: AsyncClient, user_token: str):
     r = await client.get("/api/v1/users", headers={"Authorization": f"Bearer {user_token}"})
     assert r.status_code == 403
-    # Admin can
-    r = await client.get("/api/v1/users", headers={"Authorization": f"Bearer {admin_token}"})
-    assert r.status_code == 200
-    assert r.json()["total"] >= 1
+
+
+@pytest.mark.asyncio
+async def test_owner_creates_admin(client: AsyncClient, owner_token: str):
+    r = await client.post("/api/v1/users/admin", json={
+        "email": "newclient@productions.com",
+        "name": "New Client",
+    }, headers={"Authorization": f"Bearer {owner_token}"})
+    assert r.status_code == 201
+    assert r.json()["role"] == "admin"
+
+
+@pytest.mark.asyncio
+async def test_admin_cannot_create_admin(client: AsyncClient, admin_token: str):
+    r = await client.post("/api/v1/users/admin", json={
+        "email": "hack@evil.com",
+        "name": "Hacker",
+    }, headers={"Authorization": f"Bearer {admin_token}"})
+    assert r.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_owner_deactivates_user(client: AsyncClient, owner_token: str, regular_user):
+    r = await client.delete(
+        f"/api/v1/users/{regular_user.id}",
+        headers={"Authorization": f"Bearer {owner_token}"},
+    )
+    assert r.status_code == 204
+
+
+@pytest.mark.asyncio
+async def test_admin_cannot_deactivate_user(client: AsyncClient, admin_token: str, regular_user):
+    r = await client.delete(
+        f"/api/v1/users/{regular_user.id}",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert r.status_code == 403

@@ -60,6 +60,26 @@ def make_token(user_id: str, role: str = "user") -> str:
 
 
 @pytest_asyncio.fixture
+async def owner_user(db: AsyncSession):
+    from app.models.user import User
+    user = User(
+        id=uuid.uuid4(),
+        email="owner@wificinemas.com",
+        name="Owner",
+        role="owner",
+    )
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+    return user
+
+
+@pytest_asyncio.fixture
+async def owner_token(owner_user):
+    return make_token(str(owner_user.id), "owner")
+
+
+@pytest_asyncio.fixture
 async def admin_user(db: AsyncSession):
     from app.models.user import User
     user = User(

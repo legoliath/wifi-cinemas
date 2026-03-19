@@ -31,13 +31,19 @@ async def get_current_user(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User deactivated")
     return user
 
+async def require_owner(current_user: Annotated[User, Depends(get_current_user)]) -> User:
+    if current_user.role != "owner":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Owner access required")
+    return current_user
+
+
 async def require_admin(current_user: Annotated[User, Depends(get_current_user)]) -> User:
-    if current_user.role != "admin":
+    if current_user.role not in ("owner", "admin"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
     return current_user
 
 
 async def require_tech_or_admin(current_user: Annotated[User, Depends(get_current_user)]) -> User:
-    if current_user.role not in ("admin", "tech"):
+    if current_user.role not in ("owner", "admin", "tech"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tech or admin access required")
     return current_user
