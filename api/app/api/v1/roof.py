@@ -1,11 +1,11 @@
-"""Roof Monitor — WebSocket channel between roof phone and tech at the roulotte.
+"""Roof Monitor — Pull-based: tech requests a snapshot, roof phone responds.
 
 Flow:
-  1. Roof phone connects to /ws/roof/{shoot_id}?token=...&role=publisher
-  2. Tech phone connects to /ws/roof/{shoot_id}?token=...&role=subscriber
-  3. Every ~2s the roof phone publishes telemetry (JSON)
-  4. Server persists a sample (every 30s) and relays ALL to subscribers in real-time
-  5. Server computes an adjustment hint and includes it in the relay
+  1. Both connect to /ws/roof/{shoot_id}?token=...&role=publisher|subscriber
+  2. Roof phone idles (no constant streaming, saves battery)
+  3. Tech sends {"type": "request_snapshot"} → server relays to roof phone
+  4. Roof phone reads sensors, replies {"type": "snapshot", ...}
+  5. Server relays snapshot to tech + persists to DB
 """
 import asyncio
 import uuid
@@ -27,10 +27,8 @@ from app.schemas.roof import RoofTelemetryIn, RoofTelemetryOut, RoofAdjustmentHi
 router = APIRouter(prefix="/roof", tags=["Roof Monitor"])
 
 # ── In-memory state per shoot ──────────────────────────────────────────
-_subscribers: dict[str, list[WebSocket]] = {}   # shoot_id → [ws, ...]
-_publishers: dict[str, WebSocket] = {}           # shoot_id → ws (one phone per shoot)
-_last_persist: dict[str, float] = {}             # shoot_id → epoch
-PERSIST_INTERVAL = 30  # seconds between DB writes
+_subscribers: dict[str, list[WebSocket]] = {}   # shoot_id → [tech ws, ...]
+_publishers: dict[str, WebSocket] = {}           # shoot_id → roof phone ws
 
 
 def _compute_hint(data: dict) -> dict:
@@ -45,7 +43,6 @@ def _compute_hint(data: dict) -> dict:
                 "obstruction_pct": obstruction, "signal_strength": signal,
                 "message": "Signal bon — ne touche à rien 👍"}
 
-    # Determine direction from tilt + obstruction
     if abs(tilt_x) > abs(tilt_y):
         direction = "right" if tilt_x > 0 else "left"
     else:
@@ -64,11 +61,9 @@ def _compute_hint(data: dict) -> dict:
         "forward": "↑ Avance",
         "backward": "↓ Recule",
     }
-    message = f"{msg_map[direction]} ({magnitude})"
-
     return {"action": "adjust", "direction": direction, "magnitude": magnitude,
             "obstruction_pct": obstruction, "signal_strength": signal,
-            "message": message}
+            "message": f"{msg_map[direction]} ({magnitude})"}
 
 
 def _validate_ws_token(token: str) -> dict | None:
@@ -78,7 +73,7 @@ def _validate_ws_token(token: str) -> dict | None:
         return None
 
 
-# ── WebSocket: the main channel ────────────────────────────────────────
+# ── WebSocket: pull-based channel ──────────────────────────────────────
 ws_router = APIRouter(tags=["Roof Monitor WS"])
 
 
@@ -94,46 +89,77 @@ async def ws_roof_monitor(websocket: WebSocket, shoot_id: str,
     await websocket.accept()
 
     if role == "publisher":
+        # ── Roof phone: sits idle, responds to snapshot requests ──
         _publishers[shoot_id] = websocket
         try:
             while True:
                 raw = await websocket.receive_json()
-                # Validate
-                data = RoofTelemetryIn(**raw).model_dump()
-                # Compute hint
-                hint = _compute_hint(data)
-                # Relay to all subscribers
-                envelope = {"type": "roof_telemetry", "shoot_id": shoot_id,
-                            "timestamp": datetime.now(timezone.utc).isoformat(),
-                            "telemetry": data, "hint": hint}
-                dead = []
-                for sub in _subscribers.get(shoot_id, []):
-                    try:
-                        await sub.send_json(envelope)
-                    except Exception:
-                        dead.append(sub)
-                for d in dead:
-                    _subscribers[shoot_id].remove(d)
-                # Persist sample every PERSIST_INTERVAL
-                now = time.time()
-                if now - _last_persist.get(shoot_id, 0) >= PERSIST_INTERVAL:
-                    _last_persist[shoot_id] = now
+                msg_type = raw.get("type")
+
+                if msg_type == "snapshot":
+                    # Roof phone is responding to a request
+                    data = RoofTelemetryIn(**{k: v for k, v in raw.items() if k != "type"}).model_dump()
+                    hint = _compute_hint(data)
+                    envelope = {
+                        "type": "snapshot_response",
+                        "shoot_id": shoot_id,
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "telemetry": data,
+                        "hint": hint,
+                    }
+                    # Relay to all subscribers (tech)
+                    dead = []
+                    for sub in _subscribers.get(shoot_id, []):
+                        try:
+                            await sub.send_json(envelope)
+                        except Exception:
+                            dead.append(sub)
+                    for d in dead:
+                        _subscribers[shoot_id].remove(d)
+                    # Persist every snapshot (they're infrequent now)
                     asyncio.create_task(_persist_telemetry(shoot_id, data))
+
+                # Roof phone can also send heartbeats to confirm it's alive
+                elif msg_type == "heartbeat":
+                    pass  # just keeps connection alive
+
         except WebSocketDisconnect:
             _publishers.pop(shoot_id, None)
 
-    else:  # subscriber (tech / admin)
+    else:
+        # ── Tech/admin: subscriber — sends requests, receives snapshots ──
         _subscribers.setdefault(shoot_id, []).append(websocket)
         try:
             while True:
-                # Subscribers can send commands back (future: "take photo", "reboot")
-                await websocket.receive_text()
+                raw = await websocket.receive_json()
+                msg_type = raw.get("type")
+
+                if msg_type == "request_snapshot":
+                    # Relay request to the roof phone
+                    pub = _publishers.get(shoot_id)
+                    if pub:
+                        try:
+                            await pub.send_json({"type": "request_snapshot"})
+                        except Exception:
+                            await websocket.send_json({
+                                "type": "error",
+                                "message": "Téléphone-toit déconnecté",
+                            })
+                            _publishers.pop(shoot_id, None)
+                    else:
+                        await websocket.send_json({
+                            "type": "error",
+                            "message": "Aucun téléphone-toit connecté pour ce shoot",
+                        })
+
         except WebSocketDisconnect:
-            _subscribers.get(shoot_id, []).remove(websocket) if websocket in _subscribers.get(shoot_id, []) else None
+            subs = _subscribers.get(shoot_id, [])
+            if websocket in subs:
+                subs.remove(websocket)
 
 
 async def _persist_telemetry(shoot_id: str, data: dict):
-    """Fire-and-forget DB write for telemetry sample."""
+    """Fire-and-forget DB write."""
     try:
         async with async_session() as db:
             entry = RoofTelemetry(shoot_id=uuid.UUID(shoot_id), **data)
@@ -143,12 +169,12 @@ async def _persist_telemetry(shoot_id: str, data: dict):
         print(f"[roof] persist error: {e}")
 
 
-# ── REST endpoints (fallback + history) ────────────────────────────────
+# ── REST endpoints ─────────────────────────────────────────────────────
 
 @router.get("/status/{shoot_id}")
 async def roof_status(shoot_id: str,
                       current_user: Annotated[User, Depends(require_tech_or_admin)]):
-    """Is the roof phone currently streaming?"""
+    """Is the roof phone currently connected and ready?"""
     is_live = shoot_id in _publishers
     subs = len(_subscribers.get(shoot_id, []))
     return {"shoot_id": shoot_id, "is_live": is_live, "subscribers": subs}
@@ -159,7 +185,7 @@ async def roof_history(shoot_id: uuid.UUID,
                        current_user: Annotated[User, Depends(require_tech_or_admin)],
                        db: Annotated[AsyncSession, Depends(get_db)],
                        limit: int = Query(60, ge=1, le=500)):
-    """Last N telemetry samples (persisted every ~30s)."""
+    """Last N snapshots (one per request, not continuous)."""
     result = await db.execute(
         select(RoofTelemetry)
         .where(RoofTelemetry.shoot_id == shoot_id)
@@ -175,7 +201,7 @@ async def post_telemetry(shoot_id: uuid.UUID,
                          data: RoofTelemetryIn,
                          current_user: Annotated[User, Depends(get_current_user)],
                          db: Annotated[AsyncSession, Depends(get_db)]):
-    """REST fallback if WebSocket drops — phone POSTs every few seconds."""
+    """REST fallback — POST a snapshot manually."""
     entry = RoofTelemetry(shoot_id=shoot_id, **data.model_dump())
     db.add(entry)
     await db.commit()
