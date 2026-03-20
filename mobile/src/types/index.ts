@@ -1,4 +1,4 @@
-export interface User { id: string; email: string; name: string; phone?: string; role: 'owner' | 'admin' | 'tech' | 'user'; lang: 'fr' | 'en'; isActive: boolean; createdAt: string; }
+export interface User { id: string; email: string; name: string; phone?: string; role: 'owner' | 'super_admin' | 'admin' | 'tech' | 'user'; lang: 'fr' | 'en'; isActive: boolean; createdAt: string; }
 export interface Shoot { id: string; name: string; ssid: string; client: string; location?: string; startDate: string; endDate?: string; kitId?: string; status: 'scheduled' | 'active' | 'completed' | 'cancelled'; createdBy: string; createdAt: string; }
 export type NetworkSource = 'starlink' | '5g' | 'both';
 export interface NetworkStatus { shootId: string; isOnline: boolean; source: NetworkSource; isFailover: boolean; downloadMbps: number; uploadMbps: number; latencyMs: number; packetLoss: number; connectedDevices: number; lastUpdated: string; }

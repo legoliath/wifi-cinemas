@@ -97,27 +97,67 @@ async def test_admin_sees_only_own_shoots(client: AsyncClient, admin_token: str,
 
 
 @pytest.mark.asyncio
-async def test_multi_admin_shoot(client: AsyncClient, admin_token: str, db: AsyncSession, admin_user):
-    """Multiple admins can manage the same shoot."""
-    # Admin A creates shoot
+async def test_multi_admin_shoot(client: AsyncClient, owner_token: str, db: AsyncSession):
+    """Super admin adds admins. Owner assigns the super admin first."""
+    # Owner creates shoot
     r = await client.post("/api/v1/shoots", json={
         "name": "Multi Admin Shoot", "client": "Big Prod", "start_date": "2026-04-01",
-    }, headers={"Authorization": f"Bearer {admin_token}"})
+    }, headers={"Authorization": f"Bearer {owner_token}"})
     shoot_id = r.json()["id"]
 
-    # Admin A adds Admin B to the shoot as admin
+    # Owner adds super_admin to the shoot
+    r = await client.post(f"/api/v1/users/shoot/{shoot_id}/members", json={
+        "email": "superadmin@bigprod.com", "name": "Super Admin", "role": "super_admin",
+    }, headers={"Authorization": f"Bearer {owner_token}"})
+    assert r.status_code == 201
+    sa_id = r.json()["id"]
+
+    # Super admin adds Admin B
+    sa_token = make_token(sa_id, "super_admin")
     r = await client.post(f"/api/v1/users/shoot/{shoot_id}/members", json={
         "email": "adminb@bigprod.com", "name": "Admin B", "role": "admin",
-    }, headers={"Authorization": f"Bearer {admin_token}"})
+    }, headers={"Authorization": f"Bearer {sa_token}"})
     assert r.status_code == 201
     admin_b_id = r.json()["id"]
 
-    # Admin B can now list members
+    # Admin B can list members (they're a shoot admin)
     token_b = make_token(admin_b_id, "admin")
     r = await client.get(f"/api/v1/shoots/{shoot_id}/members",
                          headers={"Authorization": f"Bearer {token_b}"})
     assert r.status_code == 200
-    assert r.json()["total"] >= 2  # Admin A + Admin B
+    assert r.json()["total"] >= 2
+
+    # Admin B can add tech but NOT another admin
+    r = await client.post(f"/api/v1/users/shoot/{shoot_id}/members", json={
+        "email": "tech@set.com", "name": "Tech", "role": "tech",
+    }, headers={"Authorization": f"Bearer {token_b}"})
+    assert r.status_code == 201
+
+    r = await client.post(f"/api/v1/users/shoot/{shoot_id}/members", json={
+        "email": "hack@evil.com", "name": "Hack", "role": "admin",
+    }, headers={"Authorization": f"Bearer {token_b}"})
+    assert r.status_code == 403  # Admin can't add admin
+
+
+@pytest.mark.asyncio
+async def test_only_one_super_admin_per_shoot(client: AsyncClient, owner_token: str):
+    """Enforce 1 super_admin per shoot."""
+    r = await client.post("/api/v1/shoots", json={
+        "name": "SA Test", "client": "C", "start_date": "2026-04-01",
+    }, headers={"Authorization": f"Bearer {owner_token}"})
+    shoot_id = r.json()["id"]
+
+    # First super_admin OK
+    r = await client.post(f"/api/v1/users/shoot/{shoot_id}/members", json={
+        "email": "sa1@prod.com", "name": "SA 1", "role": "super_admin",
+    }, headers={"Authorization": f"Bearer {owner_token}"})
+    assert r.status_code == 201
+
+    # Second super_admin REJECTED
+    r = await client.post(f"/api/v1/users/shoot/{shoot_id}/members", json={
+        "email": "sa2@prod.com", "name": "SA 2", "role": "super_admin",
+    }, headers={"Authorization": f"Bearer {owner_token}"})
+    assert r.status_code == 409
 
 
 @pytest.mark.asyncio

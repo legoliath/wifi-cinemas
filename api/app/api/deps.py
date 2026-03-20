@@ -38,13 +38,13 @@ async def require_owner(current_user: Annotated[User, Depends(get_current_user)]
 
 
 async def require_admin(current_user: Annotated[User, Depends(get_current_user)]) -> User:
-    if current_user.role not in ("owner", "admin"):
+    if current_user.role not in ("owner", "super_admin", "admin"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
     return current_user
 
 
 async def require_tech_or_admin(current_user: Annotated[User, Depends(get_current_user)]) -> User:
-    if current_user.role not in ("owner", "admin", "tech"):
+    if current_user.role not in ("owner", "super_admin", "admin", "tech"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tech or admin access required")
     return current_user
 
@@ -60,7 +60,7 @@ async def check_shoot_admin(
         select(ShootAccess).where(
             ShootAccess.shoot_id == shoot_id,
             ShootAccess.user_id == user.id,
-            ShootAccess.shoot_role == "admin",
+            ShootAccess.shoot_role.in_(["super_admin", "admin"]),
             ShootAccess.revoked_at.is_(None),
         )
     )
@@ -75,7 +75,7 @@ async def check_shoot_access(
     if user.role == "owner":
         return True
     from app.models.shoot_access import ShootAccess
-    role_hierarchy = {"admin": 3, "tech": 2, "user": 1}
+    role_hierarchy = {"super_admin": 4, "admin": 3, "tech": 2, "user": 1}
     min_level = role_hierarchy.get(min_role, 1)
     result = await db.execute(
         select(ShootAccess).where(
