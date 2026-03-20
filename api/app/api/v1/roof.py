@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.database import get_db, async_session
-from app.api.deps import get_current_user, require_tech_or_admin
+from app.api.deps import get_current_user, require_admin
 from app.models.user import User
 from app.models.roof_telemetry import RoofTelemetry
 from app.schemas.roof import RoofTelemetryIn, RoofTelemetryOut, RoofAdjustmentHint
@@ -173,7 +173,7 @@ async def _persist_telemetry(shoot_id: str, data: dict):
 
 @router.get("/status/{shoot_id}")
 async def roof_status(shoot_id: str,
-                      current_user: Annotated[User, Depends(require_tech_or_admin)]):
+                      current_user: Annotated[User, Depends(require_admin)]):
     """Is the roof phone currently connected and ready?"""
     is_live = shoot_id in _publishers
     subs = len(_subscribers.get(shoot_id, []))
@@ -182,7 +182,7 @@ async def roof_status(shoot_id: str,
 
 @router.get("/history/{shoot_id}", response_model=list[RoofTelemetryOut])
 async def roof_history(shoot_id: uuid.UUID,
-                       current_user: Annotated[User, Depends(require_tech_or_admin)],
+                       current_user: Annotated[User, Depends(require_admin)],
                        db: Annotated[AsyncSession, Depends(get_db)],
                        limit: int = Query(60, ge=1, le=500)):
     """Last N snapshots (one per request, not continuous)."""

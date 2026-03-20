@@ -12,10 +12,19 @@ class ShootAccess(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     shoot_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("shoots.id"))
-    # Role within THIS shoot: admin can manage crew, tech can roof monitor, user is basic
-    shoot_role: Mapped[str] = mapped_column(String(20), default="user")  # "admin" | "tech" | "user"
+
+    # User class within this shoot — flexible, defined by admin (tech, vip, chef_dep, dit, etc.)
+    # NULL = no class assigned yet. To be defined later.
+    user_class: Mapped[str | None] = mapped_column(String(50), nullable=True)
+
     access_code: Mapped[str] = mapped_column(String(20), unique=True, index=True)
     qr_data: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+    # Invitation
+    invite_token: Mapped[str | None] = mapped_column(String(100), unique=True, nullable=True, index=True)
+    invite_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    invite_accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
     granted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 

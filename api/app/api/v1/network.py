@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.api.deps import get_current_user, require_tech_or_admin
+from app.api.deps import get_current_user, require_admin
 from app.models.user import User
 from app.models.device import Device
 from app.services.starlink import starlink_client
@@ -50,7 +50,7 @@ async def get_network_status(
 
 @router.get("/starlink")
 async def get_starlink_status(
-    current_user: Annotated[User, Depends(require_tech_or_admin)],
+    current_user: Annotated[User, Depends(require_admin)],
 ):
     """Raw Starlink dish status (tech/admin only)."""
     status = await starlink_client.get_status()
@@ -60,7 +60,7 @@ async def get_starlink_status(
 
 @router.get("/wan")
 async def get_wan_status(
-    current_user: Annotated[User, Depends(require_tech_or_admin)],
+    current_user: Annotated[User, Depends(require_admin)],
 ):
     """Peplink WAN status + cellular data usage (tech/admin only)."""
     wan = await peplink_client.get_wan_status()
@@ -71,7 +71,7 @@ async def get_wan_status(
 
 @router.get("/access-points")
 async def get_access_points(
-    current_user: Annotated[User, Depends(require_tech_or_admin)],
+    current_user: Annotated[User, Depends(require_admin)],
 ):
     """UniFi access points status (tech/admin only)."""
     return await unifi_client.get_access_points()

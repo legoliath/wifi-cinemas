@@ -26,7 +26,7 @@ export function AppNavigator() {
             <Stack.Screen name="QRScan" component={QRScanScreen} options={{ title: 'Scanner QR' }} />
             <Stack.Screen name="Onboarding" component={OnboardingScreen} options={{ title: 'Inscription' }} />
           </>
-        ) : user?.role === 'owner' || user?.role === 'super_admin' || user?.role === 'admin' ? (
+        ) : user?.role === 'owner' || user?.role === 'admin' ? (
           <Stack.Screen name="AdminTabs" component={AdminTabNavigator} options={{ headerShown: false }} />
         ) : user?.role === 'tech' ? (
           <Stack.Screen name="TechTabs" component={TechTabNavigator} options={{ headerShown: false }} />

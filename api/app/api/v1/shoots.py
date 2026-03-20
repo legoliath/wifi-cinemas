@@ -1,8 +1,8 @@
-"""Shoot management — multi-admin per shoot.
+"""Shoot management — 3 roles (owner/admin/user).
 
-- Owner: sees all shoots, can create/update any
-- Admin: sees shoots where they have shoot_role=admin
-- Tech/User: sees shoots they have access to
+- Owner: sees all, creates any
+- Admin: sees their shoots, creates new ones (auto-gets access)
+- User: sees shoots they're invited to
 """
 import uuid
 import secrets
@@ -30,7 +30,6 @@ async def create_shoot(
     current_user: Annotated[User, Depends(require_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    """Owner or Admin creates a shoot. Creator gets admin access automatically."""
     ssid = f"WFC-{data.name.replace(' ', '')[:20]}"
     shoot = Shoot(
         name=data.name, ssid=ssid, client=data.client, location=data.location,
@@ -40,16 +39,12 @@ async def create_shoot(
     db.add(shoot)
     await db.flush()
 
-    # Auto-grant admin access to creator
+    # Auto-grant admin access
     code = secrets.token_urlsafe(6).upper()[:8]
-    access = ShootAccess(
-        shoot_id=shoot.id,
-        user_id=current_user.id,
-        shoot_role="admin",
-        access_code=code,
-        qr_data=f"wfc://{shoot.id}/{code}",
-    )
-    db.add(access)
+    db.add(ShootAccess(
+        shoot_id=shoot.id, user_id=current_user.id,
+        access_code=code, qr_data=f"wfc://{shoot.id}/{code}",
+    ))
     await db.commit()
     await db.refresh(shoot)
     return shoot
@@ -61,20 +56,16 @@ async def list_shoots(
     db: Annotated[AsyncSession, Depends(get_db)],
     status_filter: str | None = Query(None, alias="status"),
 ):
-    """Owner sees all. Others see shoots they have access to."""
     if current_user.role == "owner":
         query = select(Shoot)
     else:
-        # All roles (admin/tech/user) see shoots via ShootAccess
         query = (
             select(Shoot).distinct()
             .join(ShootAccess, ShootAccess.shoot_id == Shoot.id)
             .where(ShootAccess.user_id == current_user.id, ShootAccess.revoked_at.is_(None))
         )
-
     if status_filter:
         query = query.where(Shoot.status == status_filter)
-
     result = await db.execute(query.order_by(Shoot.created_at.desc()).limit(50))
     shoots = result.scalars().all()
     return ShootListResponse(shoots=shoots, total=len(shoots))
@@ -90,10 +81,8 @@ async def get_shoot(
     shoot = result.scalar_one_or_none()
     if not shoot:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Shoot not found")
-
     if not await check_shoot_access(current_user, shoot_id, db):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No access to this shoot")
-
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No access")
     return shoot
 
 
@@ -104,15 +93,12 @@ async def update_shoot(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    """Update shoot — must be shoot admin or owner."""
     if not await check_shoot_admin(current_user, shoot_id, db):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Shoot admin access required")
-
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
     result = await db.execute(select(Shoot).where(Shoot.id == shoot_id))
     shoot = result.scalar_one_or_none()
     if not shoot:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Shoot not found")
-
     for field, value in data.model_dump(exclude_unset=True).items():
         setattr(shoot, field, value)
     await db.commit()
@@ -127,10 +113,8 @@ async def generate_access_codes(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    """Generate access codes — shoot admins and owner."""
     if not await check_shoot_admin(current_user, shoot_id, db):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Shoot admin access required")
-
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
     codes = []
     for _ in range(data.count):
         code = secrets.token_urlsafe(6).upper()[:8]
@@ -147,22 +131,37 @@ async def list_shoot_members(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    """List all members of a shoot with their roles."""
     if not await check_shoot_admin(current_user, shoot_id, db):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Shoot admin access required")
-
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
     result = await db.execute(
         select(ShootAccess, User)
-        .join(User, User.id == ShootAccess.user_id)
+        .outerjoin(User, User.id == ShootAccess.user_id)
         .where(ShootAccess.shoot_id == shoot_id, ShootAccess.revoked_at.is_(None))
     )
     members = []
     for access, user in result.all():
         members.append({
-            "user_id": str(user.id),
-            "email": user.email,
-            "name": user.name,
-            "shoot_role": access.shoot_role,
-            "granted_at": access.granted_at.isoformat() if access.granted_at else None,
+            "user_id": str(user.id) if user else None,
+            "email": user.email if user else access.invite_email,
+            "name": user.name if user else None,
+            "user_class": access.user_class,
+            "status": "active" if access.invite_accepted_at or user else "pending",
+            "invited_at": access.granted_at.isoformat() if access.granted_at else None,
         })
     return {"shoot_id": str(shoot_id), "members": members, "total": len(members)}
+
+
+@router.get("/{shoot_id}/wifi-password")
+async def get_wifi_password(
+    shoot_id: uuid.UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Admin gets the WiFi password to share with crew (no app needed for them)."""
+    if not await check_shoot_admin(current_user, shoot_id, db):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+    result = await db.execute(select(Shoot).where(Shoot.id == shoot_id))
+    shoot = result.scalar_one_or_none()
+    if not shoot:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Shoot not found")
+    return {"ssid": shoot.ssid, "shoot_id": str(shoot_id)}

@@ -113,6 +113,22 @@ async def notify_ap_offline(shoot_id: str, ap_name: str):
     )
 
 
+async def send_invite_email(
+    to_email: str,
+    to_name: str,
+    shoot_name: str,
+    inviter_name: str,
+    invite_url: str,
+) -> bool:
+    """Send an invitation email. Uses SMTP or a transactional email service."""
+    # TODO: Replace with real email service (SendGrid, SES, Resend, etc.)
+    logger.info(
+        f"[EMAIL] Invite → {to_email}: {inviter_name} vous invite au tournage '{shoot_name}'. "
+        f"Lien: {invite_url}"
+    )
+    return True
+
+
 async def notify_data_cap(shoot_id: str, carrier: str, used_gb: float, limit_gb: float):
     pct = round(used_gb / limit_gb * 100)
     await send_topic_push(

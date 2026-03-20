@@ -11,6 +11,7 @@ from app.models.user import User
 
 security = HTTPBearer()
 
+
 async def get_current_user(
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
     db: Annotated[AsyncSession, Depends(get_db)],
@@ -31,6 +32,7 @@ async def get_current_user(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User deactivated")
     return user
 
+
 async def require_owner(current_user: Annotated[User, Depends(get_current_user)]) -> User:
     if current_user.role != "owner":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Owner access required")
@@ -38,45 +40,34 @@ async def require_owner(current_user: Annotated[User, Depends(get_current_user)]
 
 
 async def require_admin(current_user: Annotated[User, Depends(get_current_user)]) -> User:
-    if current_user.role not in ("owner", "super_admin", "admin"):
+    """Owner or admin."""
+    if current_user.role not in ("owner", "admin"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
     return current_user
 
 
-async def require_tech_or_admin(current_user: Annotated[User, Depends(get_current_user)]) -> User:
-    if current_user.role not in ("owner", "super_admin", "admin", "tech"):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tech or admin access required")
-    return current_user
-
-
-async def check_shoot_admin(
-    user: User, shoot_id: uuid.UUID, db: AsyncSession
-) -> bool:
-    """Check if user is owner OR has admin-level access to this shoot."""
+async def check_shoot_admin(user: User, shoot_id: uuid.UUID, db: AsyncSession) -> bool:
+    """Is this user owner, or the admin of this shoot?"""
     if user.role == "owner":
         return True
+    if user.role != "admin":
+        return False
     from app.models.shoot_access import ShootAccess
     result = await db.execute(
         select(ShootAccess).where(
             ShootAccess.shoot_id == shoot_id,
             ShootAccess.user_id == user.id,
-            ShootAccess.shoot_role.in_(["super_admin", "admin"]),
             ShootAccess.revoked_at.is_(None),
         )
     )
     return result.scalar_one_or_none() is not None
 
 
-async def check_shoot_access(
-    user: User, shoot_id: uuid.UUID, db: AsyncSession,
-    min_role: str = "user",
-) -> bool:
-    """Check if user has at least min_role access to this shoot."""
+async def check_shoot_access(user: User, shoot_id: uuid.UUID, db: AsyncSession) -> bool:
+    """Does this user have any access to this shoot?"""
     if user.role == "owner":
         return True
     from app.models.shoot_access import ShootAccess
-    role_hierarchy = {"super_admin": 4, "admin": 3, "tech": 2, "user": 1}
-    min_level = role_hierarchy.get(min_role, 1)
     result = await db.execute(
         select(ShootAccess).where(
             ShootAccess.shoot_id == shoot_id,
@@ -84,7 +75,4 @@ async def check_shoot_access(
             ShootAccess.revoked_at.is_(None),
         )
     )
-    access = result.scalar_one_or_none()
-    if not access:
-        return False
-    return role_hierarchy.get(access.shoot_role, 0) >= min_level
+    return result.scalar_one_or_none() is not None
